@@ -23,7 +23,9 @@ const userSchema = new mongoose.Schema({
     role: {
         type: String,
         default: "user"
-    }
+    },
+    resetCode: String,
+    resetCodeExpires: Date,
 });
 
 

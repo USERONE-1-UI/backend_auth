@@ -66,18 +66,67 @@ const logout = (req, res) => {
     });
     res.json({ success: true });
 }
+
+
+const getUser = async (req, res) => {
+    const user = await User.findOne({ _id: req.user.id }).lean();
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { password, ...userData } = user;
+    res.json(userData);
+}
+
 const updatePassword = async (req, res) => {
     const { email } = req.body;
     try {
         const user = await User.findOne({ email: email });
         if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-        genPassword = passwordGenerator();
-        emailSender(email, genPassword);
-        res.status(201).json({ message: "Email sent." });
+        const genPassword = passwordGenerator();
+        user.resetCode = genPassword;
+        user.resetCodeExpires = Date.now() + 15 * 60 * 1000;
+        await user.save();
+        await emailSender(email, genPassword);
+        res.status(201).json({ success: true, message: "Email sent." });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
-
+}
+const verifyCode = async (req, res) => {
+    const { email, code } = req.body;
+    try {
+        const user = await User.findOne({ email: email });
+        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+        if (
+            user.resetCode !== code ||
+            !user.resetCodeExpires ||
+            user.resetCodeExpires < Date.now()
+        ) {
+            return res.status(401).json({ error: 'Invalid or expired code' });
+        }
+        res.status(200).json({ success: true, message: 'Code verified successfully' });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+}
+const resetPassword = async (req, res) => {
+    const { email, code, newPassword } = req.body;
+    try {
+        const user = await User.findOne({ email: email });
+        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+        if (
+            user.resetCode !== code ||
+            !user.resetCodeExpires ||
+            user.resetCodeExpires < Date.now()
+        ) {
+            return res.status(401).json({ error: 'Invalid or expired code' });
+        }
+        user.password = newPassword;
+        user.resetCode = undefined;
+        user.resetCodeExpires = undefined;
+        await user.save();
+        res.status(200).json({ success: true, message: 'Password reset successfully' });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
 }
 
 const getUsers = async (req, res) => {
@@ -132,4 +181,4 @@ const deleteUser = async (req, res) => {
 }
 
 
-module.exports = { register, login, logout, getUsers, updateUser, deleteUser, updatePassword }
+module.exports = { register, login, logout, getUser, getUsers, updateUser, deleteUser, updatePassword, verifyCode, resetPassword };
